@@ -1,0 +1,254 @@
+// Prisma Schema for Damage Assessment Platform
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  company   String?
+  phone     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscription Subscription?
+  jobs         AssessmentJob[]
+  apiKeys      ApiKey[]
+
+  @@map("users")
+}
+
+model Subscription {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  plan   PlanType
+  status SubscriptionStatus
+
+  stripeCustomerId     String @unique
+  stripeSubscriptionId String @unique
+
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean @default(false)
+
+  reportsUsed  Int @default(0)
+  reportsLimit Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+enum PlanType {
+  STARTER
+  PROFESSIONAL
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  TRIALING
+  INCOMPLETE
+}
+
+// ============================================
+// ASSESSMENT JOBS
+// ============================================
+
+model AssessmentJob {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  status JobStatus @default(CREATED)
+
+  // Input data
+  propertyAddress String?
+  propertyZip     String?
+  propertyType    PropertyType?
+
+  companyName    String?
+  brandingConfig Json?
+
+  photoCount   Int          @default(0)
+  estimateTier EstimateTier @default(STANDARD)
+
+  // Processing metadata
+  createdAt           DateTime  @default(now())
+  claudeStartedAt     DateTime?
+  claudeCompletedAt   DateTime?
+  derekStartedAt      DateTime?
+  derekCompletedAt    DateTime?
+  alexStartedAt       DateTime?
+  alexCompletedAt     DateTime?
+  marcusStartedAt     DateTime?
+  marcusCompletedAt   DateTime?
+  completedAt         DateTime?
+  totalProcessingMs   Int?
+
+  // Agent outputs
+  claudeOutput    Json?
+  derekOutput     Json?
+  alexOutput      Json?
+  marcusOutput    Json?
+  finalAssessment Json?
+
+  // Report
+  reportUrl      String?
+  reportFileName String?
+
+  // Quality metrics
+  confidenceScore Decimal? @db.Decimal(3, 2)
+
+  // Error handling
+  errorMessage String?
+  retryCount   Int     @default(0)
+
+  photos Photo[]
+
+  @@index([userId, status])
+  @@index([createdAt])
+  @@map("assessment_jobs")
+}
+
+enum JobStatus {
+  CREATED
+  UPLOADING
+  ANALYZING
+  VALIDATING
+  COMPLIANCE_CHECK
+  COSTING
+  GENERATING
+  COMPLETE
+  FAILED
+}
+
+enum PropertyType {
+  SINGLE_FAMILY_RESIDENTIAL
+  MULTI_FAMILY_RESIDENTIAL
+  COMMERCIAL
+  INDUSTRIAL
+}
+
+enum EstimateTier {
+  ECONOMY
+  STANDARD
+  PREMIUM
+}
+
+// ============================================
+// PHOTOS
+// ============================================
+
+model Photo {
+  id    String        @id @default(uuid())
+  jobId String
+  job   AssessmentJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  fileName     String
+  fileSize     Int
+  mimeType     String
+  storageUrl   String
+  thumbnailUrl String?
+
+  width  Int?
+  height Int?
+
+  // EXIF metadata
+  takenAt      DateTime?
+  gpsLatitude  Decimal?  @db.Decimal(10, 8)
+  gpsLongitude Decimal?  @db.Decimal(11, 8)
+  cameraMake   String?
+  cameraModel  String?
+
+  // Classification
+  locationType LocationType?
+  locationName String?
+  elevation    Elevation?
+
+  hasDamage   Boolean  @default(false)
+  damageTypes String[]
+
+  uploadedAt DateTime @default(now())
+
+  @@index([jobId])
+  @@map("photos")
+}
+
+enum LocationType {
+  INTERIOR
+  EXTERIOR
+  SITE
+  UNASSIGNED
+}
+
+enum Elevation {
+  NORTH
+  SOUTH
+  EAST
+  WEST
+  ROOF
+}
+
+// ============================================
+// API KEYS
+// ============================================
+
+model ApiKey {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name String
+  key  String @unique
+
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+
+  isActive Boolean @default(true)
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+// ============================================
+// AUDIT LOGS
+// ============================================
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  userId String?
+  jobId  String?
+
+  action    String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([jobId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
